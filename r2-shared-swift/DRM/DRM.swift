@@ -22,10 +22,12 @@ public struct DRM {
 
     public enum Brand: String {
         case lcp
+        case adobe
     }
 
     public enum Scheme: String {
         case lcp = "http://readium.org/2014/01/lcp"
+        case adobe = "http://ns.adobe.com/adept"
     }
 
     public init(brand: Brand) {
@@ -33,6 +35,8 @@ public struct DRM {
         switch brand {
         case .lcp:
             scheme = .lcp
+        case .adobe:
+            scheme = .adobe
         }
     }
 }
