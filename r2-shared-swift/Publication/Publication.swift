@@ -29,7 +29,7 @@ public class Publication: JSONEquatable, Loggable {
     public var links: [Link]  // FIXME: should not be mutable
     public let readingOrder: [Link]
     public let resources: [Link]
-    public let otherCollections: [PublicationCollection]
+    public var otherCollections: [PublicationCollection]
     
     public var tableOfContents: [Link] {
         otherCollections.first(withRole: "toc")?.links ?? []
