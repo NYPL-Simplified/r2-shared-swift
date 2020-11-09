@@ -23,6 +23,16 @@ public struct DRM {
     public enum Brand: String {
         case lcp
         case adobe
+
+        /// License file path based on the DRM type
+        /// - Parameter url: protected file URL
+        /// - Returns: License file path based on the DRM type
+        public func licenseFile(for url: URL) -> URL {
+            switch self {
+            case .lcp: return URL(fileURLWithPath: url.path.replacingOccurrences(of: ".\(url.pathExtension)", with: ".lcpl"))
+            case .adobe: return URL(fileURLWithPath: "\(url.path)_rights.xml")
+            }
+        }
     }
 
     public enum Scheme: String {
