@@ -17,10 +17,15 @@ import Foundation
 /// providing an access to the file content.
 public final class FormatSnifferContext {
     
-    internal init(content: FormatSnifferContent? = nil, mediaTypes: [String], fileExtensions: [String]) {
+    private let archiveFactory: ArchiveFactory
+    private let xmlFactory: XMLDocumentFactory
+    
+    internal init(content: FormatSnifferContent? = nil, mediaTypes: [String], fileExtensions: [String], archiveFactory: ArchiveFactory = DefaultArchiveFactory(), xmlFactory: XMLDocumentFactory = DefaultXMLDocumentFactory()) {
         self.content = content
         self.mediaTypes = mediaTypes.compactMap { MediaType($0) }
         self.fileExtensions = fileExtensions.map { $0.lowercased() }
+        self.archiveFactory = archiveFactory
+        self.xmlFactory = xmlFactory
     }
     
     // MARK: Metadata
@@ -73,12 +78,12 @@ public final class FormatSnifferContext {
 
     /// Content as an XML document.
     lazy var contentAsXML: XMLDocument? = contentAsString
-        .flatMap { FuziXMLDocument(string: $0) }
+        .flatMap { try? xmlFactory.open(string: $0, namespaces: []) }
 
-    /// Content as a ZIP archive.
+    /// Content as an archive.
     /// Warning: ZIP is only supported for a local file, for now.
-    lazy var contentAsZIP: Archive? = (content as? FormatSnifferFileContent)
-        .flatMap { try? MinizipArchive(file: $0.file) }
+    lazy var contentAsArchive: Archive? = (content as? FormatSnifferFileContent)
+        .flatMap { try? archiveFactory.open(url: $0.file, password: nil) }
 
     /// Content parsed from JSON.
     public lazy var contentAsJSON: Any? = contentAsString
@@ -86,8 +91,8 @@ public final class FormatSnifferContext {
         .flatMap { try? JSONSerialization.jsonObject(with: $0) }
     
     /// Publication parsed from the content.
-    public lazy var contentAsRWPM: Publication? = contentAsJSON
-        .flatMap { try? Publication(json: $0) }
+    public lazy var contentAsRWPM: Manifest? = contentAsJSON
+        .flatMap { try? Manifest(json: $0) }
 
     /// Raw bytes stream of the content.
     ///
@@ -116,20 +121,20 @@ public final class FormatSnifferContext {
         return bytesRead > 0 ? String(cString: buffer) : nil
     }
     
-    /// Returns whether a ZIP entry exists in this file.
-    func containsZIPEntry(at path: String) -> Bool {
-        return contentAsZIP?.entry(at: path) != nil
+    /// Returns whether an Archive entry exists in this file.
+    func containsArchiveEntry(at path: String) -> Bool {
+        return (try? contentAsArchive?.entry(at: path)) != nil
     }
     
-    /// Returns the ZIP entry data at the given `path` in this file.
-    func readZIPEntry(at path: String) -> Data? {
-        return contentAsZIP?.read(at: path)
+    /// Returns the Archive entry data at the given `path` in this file.
+    func readArchiveEntry(at path: String) -> Data? {
+        return contentAsArchive?.read(at: path)
     }
     
-    /// Returns whether all the ZIP entry paths satisfy the given `predicate`.
-    func zipEntriesAllSatisfy(_ predicate: (URL) -> Bool) -> Bool {
-        return contentAsZIP?.entries
-            .map { URL(fileURLWithPath: $0.path, isDirectory: $0.isDirectory) }
+    /// Returns whether all the Archive entry paths satisfy the given `predicate`.
+    func archiveEntriesAllSatisfy(_ predicate: (URL) -> Bool) -> Bool {
+        return contentAsArchive?.entries
+            .map { URL(fileURLWithPath: $0.path) }
             .allSatisfy(predicate)
             ?? false
     }

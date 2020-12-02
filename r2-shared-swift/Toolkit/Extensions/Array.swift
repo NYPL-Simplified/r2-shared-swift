@@ -18,6 +18,30 @@ extension Array {
     public init(ofNotNil element: Element?) {
         self.init(element.map { [$0] } ?? [])
     }
+    
+    func first<T>(where transform: (Element) throws -> T?) rethrows -> T? {
+        for element in self {
+            if let result = try transform(element) {
+                return result
+            }
+        }
+        
+        return nil
+    }
+    
+    @inlinable public mutating func popFirst() -> Element? {
+        if isEmpty {
+            return nil
+        } else {
+            return removeFirst()
+        }
+    }
+    
+    @inlinable func appending(_ newElement: Element) -> Self {
+        var array = self
+        array.append(newElement)
+        return array
+    }
 
 }
 
@@ -36,4 +60,10 @@ extension Array where Element: Hashable {
         return result
     }
     
+    @inlinable func removing(_ element: Element) -> Self {
+        var array = self
+        array.removeAll { other in other == element }
+        return array
+    }
+
 }

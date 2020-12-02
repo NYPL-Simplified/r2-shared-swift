@@ -1,5 +1,5 @@
 //
-//  ZIPFetcherTests.swift
+//  ArchiveFetcherTests.swift
 //  r2-shared-swift
 //
 //  Created by Mickaël Menu on 11/05/2020.
@@ -12,14 +12,36 @@
 import XCTest
 @testable import R2Shared
 
-class ZIPFetcherTests: XCTestCase {
+class ArchiveFetcherTests: XCTestCase {
     
     let fixtures = Fixtures(path: "Fetcher")
-    var fetcher: ZIPFetcher!
+    var fetcher: ArchiveFetcher!
 
-    override func setUp() {
+    override func setUpWithError() throws {
         let url = fixtures.url(for: "epub.epub")
-        fetcher = ZIPFetcher(archive: url)!
+        fetcher = try ArchiveFetcher(archive: DefaultArchiveFactory().open(url: url, password: nil))
+    }
+    
+    func testLinks() {
+        XCTAssertEqual(
+            fetcher.links,
+            [
+                ("/mimetype", nil, nil),
+                ("/EPUB/cover.xhtml", "text/html", 259),
+                ("/EPUB/css/epub.css", "text/css", 595),
+                ("/EPUB/css/nav.css", "text/css", 306),
+                ("/EPUB/images/cover.png", "image/png", 35809),
+                ("/EPUB/nav.xhtml", "text/html", 2293),
+                ("/EPUB/package.opf", nil, 773),
+                ("/EPUB/s04.xhtml", "text/html", 118269),
+                ("/EPUB/toc.ncx", nil, 1697),
+                ("/META-INF/container.xml", "application/xml", 176)
+            ].map { href, type, compressedLength in
+                Link(href: href, type: type, properties: .init([
+                    "compressedLength": compressedLength as Any
+                ]))
+            }
+        )
     }
     
     func testReadEntryFully() {
@@ -62,6 +84,11 @@ class ZIPFetcherTests: XCTestCase {
         XCTAssertThrowsError(try result.get()) { error in
             XCTAssertEqual(ResourceError.notFound, error as? ResourceError)
         }
+    }
+    
+    func testAddsCompressedLengthToLink() {
+        let resource = fetcher.get(Link(href: "/EPUB/css/epub.css"))
+        XCTAssertEqual(resource.link.properties["compressedLength"] as? Int, 595)
     }
     
 }

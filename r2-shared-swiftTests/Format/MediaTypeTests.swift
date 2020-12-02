@@ -318,12 +318,31 @@ class MediaTypeTests: XCTestCase {
         XCTAssertTrue(MediaType("audio/mpeg;param=value")!.isAudio)
     }
     
+    func testIsVideo() {
+        XCTAssertFalse(MediaType("text/html")!.isVideo)
+        XCTAssertTrue(MediaType("video/unknown")!.isVideo)
+        XCTAssertTrue(MediaType("video/mpeg;param=value")!.isVideo)
+    }
+    
     func testIsRWPM() {
         XCTAssertFalse(MediaType("text/html")!.isRWPM)
         XCTAssertTrue(MediaType("application/audiobook+json")!.isRWPM)
         XCTAssertTrue(MediaType("application/divina+json")!.isRWPM)
         XCTAssertTrue(MediaType("application/webpub+json")!.isRWPM)
         XCTAssertTrue(MediaType("application/webpub+json;charset=utf-8")!.isRWPM)
+    }
+    
+    func testIsReadiumWebPubProfile() {
+        XCTAssertFalse(MediaType("text/html")!.isReadiumWebPubProfile)
+        XCTAssertTrue(MediaType("application/audiobook+zip")!.isReadiumWebPubProfile)
+        XCTAssertTrue(MediaType("application/audiobook+json")!.isReadiumWebPubProfile)
+        XCTAssertTrue(MediaType("application/audiobook+lcp")!.isLCPProtected)
+        XCTAssertTrue(MediaType("application/divina+zip")!.isReadiumWebPubProfile)
+        XCTAssertTrue(MediaType("application/divina+json")!.isReadiumWebPubProfile)
+        XCTAssertTrue(MediaType("application/pdf+lcp")!.isLCPProtected)
+        XCTAssertTrue(MediaType("application/webpub+zip")!.isReadiumWebPubProfile)
+        XCTAssertTrue(MediaType("application/webpub+json")!.isReadiumWebPubProfile)
+        XCTAssertTrue(MediaType("application/webpub+json;charset=utf-8")!.isReadiumWebPubProfile)
     }
     
     func testIsLCPProtected() {
