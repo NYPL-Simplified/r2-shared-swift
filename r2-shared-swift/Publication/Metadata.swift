@@ -12,7 +12,7 @@
 import Foundation
 
 /// https://readium.org/webpub-manifest/schema/metadata.schema.json
-public struct Metadata: Equatable, Loggable {
+public struct Metadata: Hashable, Loggable, WarningLogger {
 
     /// Collection type used for collection/series metadata.
     /// For convenience, the JSON schema reuse the Contributor's definition.
@@ -45,14 +45,15 @@ public struct Metadata: Equatable, Loggable {
     public let contributors: [Contributor]
     public let publishers: [Contributor]
     public let imprints: [Contributor]
-    /// WARNING: This contains the reading progression as declared in the publication, so it might be `auto`. To lay out the content, use `publication.contentLayout.readingProgression` to get the calculated reading progression from the declared direction and the language.
-    public let readingProgression: ReadingProgression
     public let description: String?
     public let duration: Double?
     public let numberOfPages: Int?
-    public let belongsToCollections: [Collection]
-    public let belongsToSeries: [Collection]
+    public let belongsTo: [String: [Collection]]
 
+    /// WARNING: This contains the reading progression as declared in the manifest, so it might be
+    /// `auto`. To know the effective reading progression used to lay out the content, use
+    /// `effectiveReadingProgression` instead.
+    public let readingProgression: ReadingProgression
 
     /// Additional properties for extensions.
     public var otherMetadata: [String: Any] { otherMetadataJSON.json }
@@ -60,7 +61,38 @@ public struct Metadata: Equatable, Loggable {
     // Trick to keep the struct equatable despite [String: Any]
     private let otherMetadataJSON: JSONDictionary
 
-    public init(identifier: String? = nil, type: String? = nil, title: LocalizedStringConvertible, subtitle: LocalizedStringConvertible? = nil, modified: Date? = nil, published: Date? = nil, languages: [String] = [], sortAs: String? = nil, subjects: [Subject] = [], authors: [Contributor] = [], translators: [Contributor] = [], editors: [Contributor] = [], artists: [Contributor] = [], illustrators: [Contributor] = [], letterers: [Contributor] = [], pencilers: [Contributor] = [], colorists: [Contributor] = [], inkers: [Contributor] = [], narrators: [Contributor] = [], contributors: [Contributor] = [], publishers: [Contributor] = [], imprints: [Contributor] = [], readingProgression: ReadingProgression = .auto, description: String? = nil, duration: Double? = nil, numberOfPages: Int? = nil, belongsToCollections: [Collection] = [], belongsToSeries: [Collection] = [], otherMetadata: [String: Any] = [:]) {
+    public init(
+        identifier: String? = nil,
+        type: String? = nil,
+        title: LocalizedStringConvertible,
+        subtitle: LocalizedStringConvertible? = nil,
+        modified: Date? = nil,
+        published: Date? = nil,
+        languages: [String] = [],
+        sortAs: String? = nil,
+        subjects: [Subject] = [],
+        authors: [Contributor] = [],
+        translators: [Contributor] = [],
+        editors: [Contributor] = [],
+        artists: [Contributor] = [],
+        illustrators: [Contributor] = [],
+        letterers: [Contributor] = [],
+        pencilers: [Contributor] = [],
+        colorists: [Contributor] = [],
+        inkers: [Contributor] = [],
+        narrators: [Contributor] = [],
+        contributors: [Contributor] = [],
+        publishers: [Contributor] = [],
+        imprints: [Contributor] = [],
+        readingProgression: ReadingProgression = .auto,
+        description: String? = nil,
+        duration: Double? = nil,
+        numberOfPages: Int? = nil,
+        belongsTo: [String: [Collection]] = [:],
+        belongsToCollections: [Collection] = [],
+        belongsToSeries: [Collection] = [],
+        otherMetadata: [String: Any] = [:]
+    ) {
         self.identifier = identifier
         self.type = type
         self.localizedTitle = title.localizedString
@@ -87,14 +119,22 @@ public struct Metadata: Equatable, Loggable {
         self.description = description
         self.duration = duration
         self.numberOfPages = numberOfPages
-        self.belongsToCollections = belongsToCollections
-        self.belongsToSeries = belongsToSeries
+
+        var belongsTo = belongsTo
+        if !belongsToCollections.isEmpty {
+            belongsTo["collection"] = belongsToCollections
+        }
+        if !belongsToSeries.isEmpty {
+            belongsTo["series"] = belongsToSeries
+        }
+        self.belongsTo = belongsTo
+
         self.otherMetadataJSON = JSONDictionary(otherMetadata) ?? JSONDictionary()
     }
     
-    init(json: Any?, normalizeHref: (String) -> String = { $0 }) throws {
+    init(json: Any?, warnings: WarningLogger? = nil, normalizeHREF: (String) -> String = { $0 }) throws {
         guard var json = JSONDictionary(json),
-            let title = try LocalizedString(json: json.pop("title")) else
+            let title = try? LocalizedString(json: json.pop("title"), warnings: warnings) else
         {
             throw JSONError.parsing(Metadata.self)
         }
@@ -102,41 +142,36 @@ public struct Metadata: Equatable, Loggable {
         self.identifier = json.pop("identifier") as? String
         self.type = json.pop("@type") as? String ?? json.pop("type") as? String
         self.localizedTitle = title
-        self.localizedSubtitle = try LocalizedString(json: json.pop("subtitle"))
+        self.localizedSubtitle = try? LocalizedString(json: json.pop("subtitle"), warnings: warnings)
         self.modified = parseDate(json.pop("modified"))
         self.published = parseDate(json.pop("published"))
         self.languages = parseArray(json.pop("language"), allowingSingle: true)
         self.sortAs = json.pop("sortAs") as? String
-        self.subjects = [Subject](json: json.pop("subject"))
-        self.authors = [Contributor](json: json.pop("author"), normalizeHref: normalizeHref)
-        self.translators = [Contributor](json: json.pop("translator"), normalizeHref: normalizeHref)
-        self.editors = [Contributor](json: json.pop("editor"), normalizeHref: normalizeHref)
-        self.artists = [Contributor](json: json.pop("artist"), normalizeHref: normalizeHref)
-        self.illustrators = [Contributor](json: json.pop("illustrator"), normalizeHref: normalizeHref)
-        self.letterers = [Contributor](json: json.pop("letterer"), normalizeHref: normalizeHref)
-        self.pencilers = [Contributor](json: json.pop("penciler"), normalizeHref: normalizeHref)
-        self.colorists = [Contributor](json: json.pop("colorist"), normalizeHref: normalizeHref)
-        self.inkers = [Contributor](json: json.pop("inker"), normalizeHref: normalizeHref)
-        self.narrators = [Contributor](json: json.pop("narrator"), normalizeHref: normalizeHref)
-        self.contributors = [Contributor](json: json.pop("contributor"), normalizeHref: normalizeHref)
-        self.publishers = [Contributor](json: json.pop("publisher"), normalizeHref: normalizeHref)
-        self.imprints = [Contributor](json: json.pop("imprint"), normalizeHref: normalizeHref)
+        self.subjects = [Subject](json: json.pop("subject"), warnings: warnings)
+        self.authors = [Contributor](json: json.pop("author"), warnings: warnings,  normalizeHREF: normalizeHREF)
+        self.translators = [Contributor](json: json.pop("translator"), warnings: warnings, normalizeHREF: normalizeHREF)
+        self.editors = [Contributor](json: json.pop("editor"), warnings: warnings, normalizeHREF: normalizeHREF)
+        self.artists = [Contributor](json: json.pop("artist"), warnings: warnings, normalizeHREF: normalizeHREF)
+        self.illustrators = [Contributor](json: json.pop("illustrator"), warnings: warnings, normalizeHREF: normalizeHREF)
+        self.letterers = [Contributor](json: json.pop("letterer"), warnings: warnings, normalizeHREF: normalizeHREF)
+        self.pencilers = [Contributor](json: json.pop("penciler"), warnings: warnings, normalizeHREF: normalizeHREF)
+        self.colorists = [Contributor](json: json.pop("colorist"), warnings: warnings, normalizeHREF: normalizeHREF)
+        self.inkers = [Contributor](json: json.pop("inker"), warnings: warnings, normalizeHREF: normalizeHREF)
+        self.narrators = [Contributor](json: json.pop("narrator"), warnings: warnings, normalizeHREF: normalizeHREF)
+        self.contributors = [Contributor](json: json.pop("contributor"), warnings: warnings, normalizeHREF: normalizeHREF)
+        self.publishers = [Contributor](json: json.pop("publisher"), warnings: warnings, normalizeHREF: normalizeHREF)
+        self.imprints = [Contributor](json: json.pop("imprint"), warnings: warnings, normalizeHREF: normalizeHREF)
         self.readingProgression = parseRaw(json.pop("readingProgression")) ?? .auto
         self.description = json.pop("description") as? String
         self.duration = parsePositiveDouble(json.pop("duration"))
         self.numberOfPages = parsePositive(json.pop("numberOfPages"))
-        let belongsTo = json.pop("belongsTo") as? [String: Any]
-        self.belongsToCollections = [Collection](json: belongsTo?["collection"], normalizeHref: normalizeHref)
-        self.belongsToSeries = [Collection](json: belongsTo?["series"], normalizeHref: normalizeHref)
+        self.belongsTo = (json.pop("belongsTo") as? [String: Any])?
+            .compactMapValues { item in [Collection](json: item, warnings: warnings, normalizeHREF: normalizeHREF) }
+            ?? [:]
         self.otherMetadataJSON = json
     }
     
     var json: [String: Any] {
-        let belongsTo = makeJSON([
-            "collection": encodeIfNotEmpty(belongsToCollections.json),
-            "series": encodeIfNotEmpty(belongsToSeries.json)
-        ])
-        
         return makeJSON([
             "identifier": encodeIfNotNil(identifier),
             "@type": encodeIfNotNil(type),
@@ -164,10 +199,45 @@ public struct Metadata: Equatable, Loggable {
             "description": encodeIfNotNil(description),
             "duration": encodeIfNotNil(duration),
             "numberOfPages": encodeIfNotNil(numberOfPages),
-            "belongsTo": encodeIfNotEmpty(belongsTo)
+            "belongsTo": encodeIfNotEmpty(belongsTo.mapValues { $0.json })
         ], additional: otherMetadata)
     }
-    
+
+    public var belongsToCollections: [Collection] {
+        belongsTo["collection"] ?? []
+    }
+
+    public var belongsToSeries: [Collection] {
+        belongsTo["series"] ?? []
+    }
+
+    /// Computes a `ReadingProgression` when the value of `readingProgression` is set to `auto`,
+    /// using the publication language.
+    ///
+    /// See this issue for more details: https://github.com/readium/architecture/issues/113
+    public var effectiveReadingProgression: ReadingProgression {
+        guard readingProgression == .auto else {
+            return readingProgression
+        }
+        
+        // https://github.com/readium/readium-css/blob/develop/docs/CSS16-internationalization.md#missing-page-progression-direction
+        guard languages.count == 1, var language = languages.first?.lowercased() else {
+            return .ltr
+        }
+        
+        if ["zh-hant", "zh-tw"].contains(language) {
+            return .rtl
+        }
+        
+        // The region is ignored for ar, fa and he.
+        language = language.split(separator: "-").first.map(String.init) ?? language
+        if ["ar", "fa", "he"].contains(language) {
+            return .rtl
+        }
+        
+        return .ltr
+    }
+
     /// Makes a copy of the `Metadata`, after modifying some of its properties.
     public func copy(
         identifier: String?? = nil,
@@ -196,6 +266,7 @@ public struct Metadata: Equatable, Loggable {
         description: String?? = nil,
         duration: Double?? = nil,
         numberOfPages: Int?? = nil,
+        belongsTo: [String: [Collection]]? = nil,
         belongsToCollections: [Collection]? = nil,
         belongsToSeries: [Collection]? = nil,
         otherMetadata: [String: Any]? = nil
@@ -227,6 +298,7 @@ public struct Metadata: Equatable, Loggable {
             description: description ?? self.description,
             duration: duration ?? self.duration,
             numberOfPages: numberOfPages ?? self.numberOfPages,
+            belongsTo: belongsTo ?? self.belongsTo,
             belongsToCollections: belongsToCollections ?? self.belongsToCollections,
             belongsToSeries: belongsToSeries ?? self.belongsToSeries,
             otherMetadata: otherMetadata ?? self.otherMetadata

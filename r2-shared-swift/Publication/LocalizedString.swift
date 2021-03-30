@@ -16,7 +16,7 @@ import Foundation
 /// Can be either:
 ///   - a single nonlocalized string
 ///   - a dictionary of localized strings indexed by the BCP 47 language tag
-public enum LocalizedString: Equatable {
+public enum LocalizedString: Hashable {
     case nonlocalized(String)
     case localized([String: String])
     
@@ -37,7 +37,7 @@ public enum LocalizedString: Equatable {
     ///       "minProperties": 1
     ///     }
     ///   ]
-    public init?(json: Any?) throws {
+    public init?(json: Any?, warnings: WarningLogger? = nil) throws {
         if json == nil {
             return nil
         } else if let string = json as? String {
@@ -45,7 +45,8 @@ public enum LocalizedString: Equatable {
         } else if let strings = json as? [String: String] {
             self = .localized(strings)
         } else {
-            throw JSONError.parsing(LocalizedString.self)
+            warnings?.log("Invalid LocalizedString object", model: Self.self, source: json, severity: .moderate)
+            throw JSONError.parsing(Self.self)
         }
     }
     
